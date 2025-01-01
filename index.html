@@ -97,20 +97,30 @@
       function generateBillOptionsForSplits(splitAmounts, taxableAmount) {
         const sareeRates = { min: 785, max: 1485 };
         const fabricRates = { min: 85, max: 125 };
+        const suitRates = { min: 3000, max: 6000 };
 
         let allCombinations = [];
         const splitCombinations = splitAmounts.map((split) => {
           const options = [];
+          // Saree options
           for (let rate = sareeRates.min; rate <= sareeRates.max; rate++) {
             if (Math.abs(split % rate) < 0.01) {
               const quantity = Math.round((split / rate) * 100) / 100;
               options.push({ item: "Saree", rate, quantity, amount: split });
             }
           }
+          // Fabric options
           for (let rate = fabricRates.min; rate <= fabricRates.max; rate++) {
             if (Math.abs(split % rate) < 0.01) {
               const quantity = Math.round((split / rate) * 100) / 100;
               options.push({ item: "Fabric", rate, quantity, amount: split });
+            }
+          }
+          // Suit options (ensure this is included)
+          for (let rate = suitRates.min; rate <= suitRates.max; rate++) {
+            if (Math.abs(split % rate) < 0.01) {
+              const quantity = Math.round((split / rate) * 100) / 100;
+              options.push({ item: "Suit", rate, quantity, amount: split });
             }
           }
           return options;
@@ -152,8 +162,8 @@
             <tbody>`;
 
         items.forEach((item) => {
-          const hsnCode = item.item === "Saree" ? "5407" : "5408";
-          const unit = item.item === "Saree" ? "pc" : "mtr";
+          const hsnCode = item.item === "Saree" || item.item === "Suit" ? "5407" : "5408";
+          const unit = item.item === "Saree" || item.item === "Suit" ? "pc" : "mtr";
           tableHTML += `
             <tr>
               <td>${item.item}</td>
