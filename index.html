@@ -1,242 +1,186 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Custom Bill Generator</title>
-    <style>
-      table {
-        border-collapse: collapse;
-        width: 100%;
-        margin: 20px 0;
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Custom Bill Generator</title>
+  <style>
+    body { font-family: Arial; padding: 20px; }
+    label { display: inline-block; margin-top: 10px; }
+    input, select { margin: 5px 0; }
+    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+    th { background-color: #f4f4f4; }
+  </style>
+</head>
+<body>
+
+  <h1>Custom Bill Generator</h1>
+
+  <label for="total-amount">Grand Total (₹):</label>
+  <input type="number" id="total-amount" placeholder="Enter total"><br><br>
+
+  <label>Number of Splits:</label>
+  <select id="split-count">
+    <option value="2">2</option>
+    <option value="3" selected>3</option>
+    <option value="4">4</option>
+    <option value="5">5</option>
+  </select><br><br>
+
+  <label>Include Item Types:</label><br/>
+  <input type="checkbox" id="use-suits" checked> Suits<br>
+  <input type="checkbox" id="use-sarees" checked> Sarees<br>
+  <input type="checkbox" id="use-fabric" checked> Fabric<br><br>
+
+  <button onclick="generateBill()">Generate Bill</button>
+
+  <div id="result"></div>
+
+  <script>
+    function generateBill() {
+      const totalAmount = parseFloat(document.getElementById("total-amount").value);
+      const splitCount = parseInt(document.getElementById("split-count").value);
+      const useSuits = document.getElementById("use-suits").checked;
+      const useSarees = document.getElementById("use-sarees").checked;
+      const useFabric = document.getElementById("use-fabric").checked;
+
+      if (!totalAmount || totalAmount <= 0) {
+        alert("Please enter a valid grand total.");
+        return;
       }
-      th, td {
-        border: 1px solid #ddd;
-        text-align: center;
-        padding: 8px;
+
+      const enabledItems = [];
+      if (useSuits) enabledItems.push("Suit");
+      if (useSarees) enabledItems.push("Saree");
+      if (useFabric) enabledItems.push("Fabric");
+
+      if (enabledItems.length === 0) {
+        alert("Please select at least one item type.");
+        return;
       }
-      th {
-        background-color: #f4f4f4;
+
+      const itemRates = {
+        Suit: { min: 2000, max: 4500, hsn: "5407", unit: "pc" },
+        Saree: { min: 700, max: 1050, hsn: "5407", unit: "pc" },
+        Fabric: { min: 85, max: 125, hsn: "5408", unit: "mtr" }
+      };
+
+      // Step 1: Generate random splits of grand total (multiple of ₹50)
+      let splits = generateRandomSplits(totalAmount, splitCount, 50);
+      if (!splits) {
+        document.getElementById("result").innerHTML = "<p>Unable to generate valid splits.</p>";
+        return;
       }
-      .bold {
-        font-weight: bold;
-      }
-    </style>
-  </head>
-  <body>
-    <h1>Custom Bill Generator</h1>
 
-    <label for="total-amount">Grand Total (₹):</label>
-    <input type="number" id="total-amount" /><br /><br />
+      // Step 2: Remove GST from each split
+      const nonTaxSplits = splits.map(val => Math.round((val / 1.05) * 100) / 100);
+      const taxableAmount = Math.round(nonTaxSplits.reduce((a, b) => a + b, 0) * 100) / 100;
+      const halfTax = Math.round(taxableAmount * 0.025 * 100) / 100;
+      const grandTotal = taxableAmount + 2 * halfTax;
 
-    <label for="splits">Number of Items (Splits):</label>
-    <select id="splits">
-      <option value="2">2</option>
-      <option value="3" selected>3</option>
-      <option value="4">4</option>
-      <option value="5">5</option>
-    </select><br /><br />
+      // Step 3: Try to generate one valid bill option using allowed item types
+      const result = [];
 
-    <label>Select allowed item types:</label><br />
-    <input type="checkbox" id="suit" checked /> Suit<br />
-    <input type="checkbox" id="saree" checked /> Saree<br />
-    <input type="checkbox" id="fabric" checked /> Fabric<br /><br />
+      for (let i = 0; i < nonTaxSplits.length; i++) {
+        const amt = nonTaxSplits[i];
+        let matched = false;
 
-    <button onclick="processBill()">Generate Bill Options</button><br /><br />
-    <div id="result"></div>
+        for (const type of enabledItems) {
+          const rateRange = itemRates[type];
+          for (let rate = rateRange.min; rate <= rateRange.max; rate++) {
+            if (Math.abs(amt % rate) < 0.01) {
+              result.push({
+                item: type,
+                rate: rate,
+                quantity: (amt / rate).toFixed(2),
+                amount: amt.toFixed(2),
+                hsn: rateRange.hsn,
+                unit: rateRange.unit
+              });
+              matched = true;
+              break;
+            }
+          }
+          if (matched) break;
+        }
 
-    <script>
-      function processBill() {
-        let totalAmount = parseFloat(document.getElementById("total-amount").value);
-        let splits = parseInt(document.getElementById("splits").value);
-
-        const useSuits = document.getElementById("suit").checked;
-        const useSarees = document.getElementById("saree").checked;
-        const useFabric = document.getElementById("fabric").checked;
-
-        if (!useSuits && !useSarees && !useFabric) {
-          alert("Select at least one item type.");
+        if (!matched) {
+          document.getElementById("result").innerHTML = "<p>No valid combination found for one of the splits.</p>";
           return;
         }
-
-        if (isNaN(totalAmount) || totalAmount <= 0) {
-          alert("Please enter a valid total amount.");
-          return;
-        }
-
-        let grossSplits = generateRandomSplits(totalAmount, splits, 50);
-        let nonTaxSplits = grossSplits.map(split =>
-          Math.round((split / 1.05) * 100) / 100
-        );
-
-        let taxableAmount = Math.round(nonTaxSplits.reduce((a, b) => a + b, 0) * 100) / 100;
-        let halfTaxAmount = Math.round((taxableAmount * 0.025) * 100) / 100;
-        let totalTaxAmount = 2 * halfTaxAmount;
-        let grandTotal = Math.round((taxableAmount + totalTaxAmount) * 100) / 100;
-
-        if (Math.abs(grandTotal - totalAmount) > 0.5) {
-          document.getElementById("result").innerHTML = "Error: Tax breakdown mismatch with grand total.";
-          return;
-        }
-
-        let billOptions = generateBillOptionsForSplits(nonTaxSplits, taxableAmount, {
-          suit: useSuits,
-          saree: useSarees,
-          fabric: useFabric
-        });
-
-        let resultHTML = `
-          <h2>Results:</h2>
-          <div><strong>Gross Splits:</strong> ₹${grossSplits.join(', ₹')}</div>
-          <div><strong>Non-Tax Splits:</strong> ₹${nonTaxSplits.map(a => a.toFixed(2)).join(', ₹')}</div>
-          <div><strong>Taxable Amount:</strong> ₹${taxableAmount.toFixed(2)}</div>
-          <div><strong>2.5% CGST:</strong> ₹${halfTaxAmount.toFixed(2)}</div>
-          <div><strong>2.5% SGST:</strong> ₹${halfTaxAmount.toFixed(2)}</div>
-          <div><strong>Grand Total:</strong> ₹${grandTotal.toFixed(2)}</div><br>
-        `;
-
-        if (billOptions.length > 0) {
-          billOptions.forEach((option, index) => {
-            resultHTML += `<h3>Bill Option ${index + 1}:</h3>`;
-            resultHTML += generateBillTable(option, taxableAmount, halfTaxAmount, grandTotal);
-          });
-        } else {
-          resultHTML += "<p>No possible combinations found.</p>";
-        }
-
-        document.getElementById("result").innerHTML = resultHTML;
       }
 
-      function generateRandomSplits(total, parts, multiple) {
-        let splits = [];
-        let remaining = total;
-
-        for (let i = 0; i < parts - 1; i++) {
-          let max = remaining - (parts - i - 1) * multiple;
-          let min = multiple;
-          let split = Math.floor((Math.random() * ((max - min + 1) / multiple))) * multiple + min;
-          splits.push(split);
-          remaining -= split;
-        }
-
-        splits.push(Math.round(remaining / multiple) * multiple);
-        return splits;
-      }
-
-      function generateBillOptionsForSplits(splitAmounts, taxableAmount, allowedTypes) {
-        const ranges = {
-          suit: { min: 2000, max: 4500 },
-          saree: { min: 700, max: 1050 },
-          fabric: { min: 85, max: 125 }
-        };
-
-        let allCombinations = [];
-        const splitCombinations = splitAmounts.map((split) => {
-          const options = [];
-
-          if (allowedTypes.suit) {
-            for (let rate = ranges.suit.min; rate <= ranges.suit.max; rate++) {
-              if (Math.abs(split % rate) < 0.01) {
-                const quantity = Math.round((split / rate) * 100) / 100;
-                options.push({ item: "Suit", rate, quantity, amount: split });
-              }
-            }
-          }
-
-          if (allowedTypes.saree) {
-            for (let rate = ranges.saree.min; rate <= ranges.saree.max; rate++) {
-              if (Math.abs(split % rate) < 0.01) {
-                const quantity = Math.round((split / rate) * 100) / 100;
-                options.push({ item: "Saree", rate, quantity, amount: split });
-              }
-            }
-          }
-
-          if (allowedTypes.fabric) {
-            for (let rate = ranges.fabric.min; rate <= ranges.fabric.max; rate++) {
-              if (Math.abs(split % rate) < 0.01) {
-                const quantity = Math.round((split / rate) * 100) / 100;
-                options.push({ item: "Fabric", rate, quantity, amount: split });
-              }
-            }
-          }
-
-          return options;
-        });
-
-        function combineSplits(index, currentCombo, currentTotal) {
-          if (currentTotal > taxableAmount + 0.01) return;
-          if (index === splitCombinations.length) {
-            if (Math.abs(currentTotal - taxableAmount) < 0.01) {
-              allCombinations.push([...currentCombo]);
-            }
-            return;
-          }
-
-          for (const option of splitCombinations[index]) {
-            currentCombo.push(option);
-            combineSplits(index + 1, currentCombo, currentTotal + option.amount);
-            currentCombo.pop();
-          }
-        }
-
-        combineSplits(0, [], 0);
-        return allCombinations;
-      }
-
-      function generateBillTable(items, taxableAmount, halfTaxAmount, grandTotal) {
-        let tableHTML = `
-          <table>
-            <thead>
-              <tr>
-                <th>Description of Goods</th>
-                <th>HSN Code</th>
-                <th>Qty</th>
-                <th>Unit</th>
-                <th>Rate</th>
-                <th>Split Amount</th>
-              </tr>
-            </thead>
-            <tbody>`;
-
-        items.forEach((item) => {
-          const hsnCode = item.item === "Saree" || item.item === "Suit" ? "5407" : "5408";
-          const unit = item.item === "Saree" || item.item === "Suit" ? "pc" : "mtr";
-          tableHTML += `
+      // Step 4: Display result
+      let html = `
+        <h2>Generated Bill</h2>
+        <table>
+          <thead>
             <tr>
-              <td>${item.item}</td>
-              <td>${hsnCode}</td>
-              <td>${item.quantity}</td>
-              <td>${unit}</td>
-              <td>₹${item.rate.toFixed(2)}</td>
-              <td>₹${item.amount.toFixed(2)}</td>
-            </tr>`;
-        });
+              <th>Description</th>
+              <th>HSN Code</th>
+              <th>Qty</th>
+              <th>Unit</th>
+              <th>Rate</th>
+              <th>Amount</th>
+            </tr>
+          </thead>
+          <tbody>`;
 
-        tableHTML += `
-            </tbody>
-            <tfoot>
-              <tr>
-                <td colspan="5"><strong>Taxable Amount</strong></td>
-                <td><strong>₹${taxableAmount.toFixed(2)}</strong></td>
-              </tr>
-              <tr>
-                <td colspan="5">2.5% CGST</td>
-                <td>₹${halfTaxAmount.toFixed(2)}</td>
-              </tr>
-              <tr>
-                <td colspan="5">2.5% SGST</td>
-                <td>₹${halfTaxAmount.toFixed(2)}</td>
-              </tr>
-              <tr>
-                <td colspan="5"><strong>Grand Total</strong></td>
-                <td><strong>₹${grandTotal.toFixed(2)}</strong></td>
-              </tr>
-            </tfoot>
-          </table>`;
+      result.forEach(item => {
+        html += `
+          <tr>
+            <td>${item.item}</td>
+            <td>${item.hsn}</td>
+            <td>${item.quantity}</td>
+            <td>${item.unit}</td>
+            <td>₹${item.rate}</td>
+            <td>₹${item.amount}</td>
+          </tr>`;
+      });
 
-        return tableHTML;
+      html += `
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="5"><strong>Taxable Amount</strong></td>
+              <td><strong>₹${taxableAmount.toFixed(2)}</strong></td>
+            </tr>
+            <tr>
+              <td colspan="5">2.5% CGST</td>
+              <td>₹${halfTax.toFixed(2)}</td>
+            </tr>
+            <tr>
+              <td colspan="5">2.5% SGST</td>
+              <td>₹${halfTax.toFixed(2)}</td>
+            </tr>
+            <tr>
+              <td colspan="5"><strong>Grand Total</strong></td>
+              <td><strong>₹${grandTotal.toFixed(2)}</strong></td>
+            </tr>
+          </tfoot>
+        </table>`;
+
+      document.getElementById("result").innerHTML = html;
+    }
+
+    function generateRandomSplits(total, parts, multiple) {
+      let splits = [];
+      let remaining = total;
+
+      for (let i = 0; i < parts - 1; i++) {
+        let max = remaining - (parts - i - 1) * multiple;
+        let min = multiple;
+        if (max < min) return null;
+        let split = Math.floor((Math.random() * ((max - min + 1) / multiple))) * multiple + min;
+        splits.push(split);
+        remaining -= split;
       }
-    </script>
-  </body>
+
+      splits.push(Math.round(remaining / multiple) * multiple);
+      return splits;
+    }
+  </script>
+
+</body>
 </html>
